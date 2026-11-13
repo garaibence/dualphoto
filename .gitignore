@@ -1,0 +1,40 @@
+# Build
+build/
+out/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+compile_commands.json
+*.o
+*.a
+*.so
+*.d
+
+# Scan data (large)
+data/*
+!data/.gitkeep
+*.npz
+*.npy
+*.tbin
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Debug (core dumps; NOT the core/ directory)
+core.[0-9]*
+vgcore.*
+*.log
+perf.data*

@@ -1,0 +1,1 @@
+"""Interactive dual image viewer."""
