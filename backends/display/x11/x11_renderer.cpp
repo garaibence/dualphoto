@@ -51,7 +51,7 @@ unsigned long channel_to_mask(std::uint8_t channel, unsigned long mask) {
 } // namespace
 
 struct X11Renderer::Impl {
-    Display* display = nullptr;
+    ::Display* display = nullptr;
     int screen = 0;
     Window window = 0;
     GC gc = nullptr;
@@ -216,6 +216,10 @@ std::uint32_t X11Renderer::width() const noexcept {
 
 std::uint32_t X11Renderer::height() const noexcept {
     return impl_ == nullptr ? 0 : impl_->height;
+}
+
+void X11Renderer::present(const Frame& frame) {
+    present(frame.width, frame.height, frame.rgb);
 }
 
 void X11Renderer::present(std::uint32_t frame_width, std::uint32_t frame_height,

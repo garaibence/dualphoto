@@ -9,6 +9,7 @@
 #include <vector>
 
 #if defined(DUALPHOTO_HAVE_DISPLAY_X11)
+#include "dualphoto/frame.hpp"
 #include "x11_renderer.hpp"
 #endif
 
@@ -153,8 +154,8 @@ int main(int argc, char* argv[]) {
         std::size_t pattern_index = 0;
         while (keep_running != 0) {
             const auto& pattern = patterns[pattern_index];
-            const auto frame = pattern.create();
-            renderer.present(frame_width, frame_height, frame);
+            const dualphoto::Frame frame{frame_width, frame_height, pattern.create()};
+            renderer.present(frame);
             std::cout << "Showing " << pattern.name << '\n';
             pattern_index = (pattern_index + 1U) % (sizeof(patterns) / sizeof(patterns[0]));
 
