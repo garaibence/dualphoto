@@ -103,6 +103,18 @@ pip install -e "python[viewer,dev]"
 
 Check your session with `echo $XDG_SESSION_TYPE`.
 
+## V4L2 camera
+
+Enable the raw V4L2 camera backend with `-DDUALPHOTO_WITH_V4L2=ON`. It opens
+`/dev/video0` by default, requests a 640x480 YUYV capture stream, and returns
+packed RGB8 frames. The backend also accepts RGB24, BGR24, and UYVY formats
+when selected by the device. `dualphoto::V4L2Camera` accepts a device path and
+requested dimensions in its constructor.
+
+The current backend requires V4L2 video-capture and memory-mapped streaming
+support. Ensure the user has permission to access `/dev/video*`; see
+[`scripts/permissions.md`](scripts/permissions.md).
+
 ## Setup tips
 
 See [`docs/calibration.md`](docs/calibration.md) and
