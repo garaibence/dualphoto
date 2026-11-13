@@ -4,9 +4,23 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace dualphoto {
+
+struct CameraControlStatus {
+    std::string name;
+    bool configured = false;
+    std::string detail;
+};
+
+struct CameraControlRange {
+    std::int32_t minimum = 0;
+    std::int32_t maximum = 0;
+    std::int32_t step = 1;
+};
 
 class V4L2Camera final : public Camera {
   public:
@@ -21,6 +35,10 @@ class V4L2Camera final : public Camera {
     V4L2Camera& operator=(V4L2Camera&&) noexcept;
 
     [[nodiscard]] Frame capture() override;
+    [[nodiscard]] std::vector<CameraControlStatus> enable_automatic_controls();
+    [[nodiscard]] std::vector<CameraControlStatus> lock_automatic_controls();
+    [[nodiscard]] std::optional<CameraControlRange> exposure_absolute_range() const;
+    [[nodiscard]] bool set_exposure_absolute(std::int32_t value);
 
   private:
     struct Impl;

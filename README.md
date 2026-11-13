@@ -100,6 +100,32 @@ and reports each frame's dimensions and mean RGB values along with the capture
 rate. The actual dimensions may differ if the camera negotiates a different
 format. Press Ctrl+C to interrupt a capture run.
 
+### Projector-camera timing calibration
+
+Enable both the X11 and V4L2 backends, then run the calibration app:
+
+```sh
+cmake -S . -B build -DDUALPHOTO_WITH_X11=ON -DDUALPHOTO_WITH_V4L2=ON
+cmake --build build --parallel
+./build/apps/calibrate/dualphoto-calibrate
+```
+
+The app projects alternating black and white frames, observes the center of the
+camera image, and reports end-to-end settling latency statistics plus a
+suggested minimum wait. It requests 640x360 camera capture by default and
+first enables supported automatic camera controls while projecting white,
+waits for the image brightness to stabilize, disables auto modes, and tunes
+manual exposure to the shortest setting that produces stable white/black
+measurements with at least 20 luma contrast before measuring. It reports the
+tested exposure values and resulting frame intervals, as well as controls the
+camera cannot configure. Select a camera, resolution,
+X server, output, or number of
+transitions with `--device`, `--width`, `--height`, `--display`, `--output`, and
+`--transitions`. This is software timing calibration, not hardware-trigger
+synchronization; see
+[`docs/calibration.md`](docs/calibration.md) for its limitations and setup
+guidance.
+
 ### Python
 
 ```sh

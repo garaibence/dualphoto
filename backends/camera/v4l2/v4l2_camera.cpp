@@ -1,12 +1,14 @@
 #include "v4l2_camera.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <fcntl.h>
 #include <linux/videodev2.h>
+#include <optional>
 #include <poll.h>
 #include <stdexcept>
 #include <string>
@@ -32,6 +34,10 @@ int xioctl(int fd, unsigned long request, void* argument) {
         result = ioctl(fd, request, argument);
     } while (result == -1 && errno == EINTR);
     return result;
+}
+
+bool unsupported_control_error(int error) {
+    return error == EINVAL || error == ENOTTY;
 }
 
 std::uint8_t clamp_channel(int value) {
@@ -200,6 +206,187 @@ struct V4L2Camera::Impl {
         streaming = true;
     }
 
+    std::optional<v4l2_queryctrl> query_control(std::uint32_t id) const {
+        v4l2_queryctrl query{};
+        query.id = id;
+        if (xioctl(fd, VIDIOC_QUERYCTRL, &query) == 0) {
+            if ((query.flags & V4L2_CTRL_FLAG_DISABLED) != 0) {
+                return std::nullopt;
+            }
+            return query;
+        }
+        if (unsupported_control_error(errno)) {
+            return std::nullopt;
+        }
+        throw_system_error("Unable to query V4L2 control");
+    }
+
+    std::optional<std::int32_t> get_control(std::uint32_t id) const {
+        if (!query_control(id)) {
+            return std::nullopt;
+        }
+        v4l2_control control{};
+        control.id = id;
+        if (xioctl(fd, VIDIOC_G_CTRL, &control) == 0) {
+            return control.value;
+        }
+        if (unsupported_control_error(errno)) {
+            return std::nullopt;
+        }
+        throw_system_error("Unable to read V4L2 control");
+    }
+
+    bool set_control(std::uint32_t id, std::int32_t value) const {
+        if (!query_control(id)) {
+            return false;
+        }
+        v4l2_control control{};
+        control.id = id;
+        control.value = value;
+        if (xioctl(fd, VIDIOC_S_CTRL, &control) == 0) {
+            return true;
+        }
+        if (unsupported_control_error(errno)) {
+            return false;
+        }
+        throw_system_error("Unable to set V4L2 control");
+    }
+
+    bool menu_value_supported(std::uint32_t id, std::int32_t value) const {
+        v4l2_querymenu menu{};
+        menu.id = id;
+        menu.index = static_cast<std::uint32_t>(value);
+        if (xioctl(fd, VIDIOC_QUERYMENU, &menu) == 0) {
+            return true;
+        }
+        if (unsupported_control_error(errno)) {
+            return false;
+        }
+        throw_system_error("Unable to query V4L2 control menu");
+    }
+
+    CameraControlStatus set_automatic_control(std::uint32_t id, std::int32_t automatic_value,
+                                              const char* name) const {
+        if (!query_control(id)) {
+            return {name, false, "automatic control is unsupported"};
+        }
+        if (!set_control(id, automatic_value)) {
+            return {name, false, "could not enable automatic mode"};
+        }
+        return {name, true, "automatic mode enabled"};
+    }
+
+    CameraControlStatus enable_automatic_exposure() const {
+        if (!query_control(V4L2_CID_EXPOSURE_AUTO)) {
+            return {"auto exposure", false, "automatic control is unsupported"};
+        }
+
+        constexpr std::array<std::pair<std::int32_t, const char*>, 3> automatic_modes = {{
+            {V4L2_EXPOSURE_AUTO, "automatic"},
+            {V4L2_EXPOSURE_APERTURE_PRIORITY, "aperture-priority automatic"},
+            {V4L2_EXPOSURE_SHUTTER_PRIORITY, "shutter-priority automatic"},
+        }};
+        for (const auto& [mode, description] : automatic_modes) {
+            if (menu_value_supported(V4L2_CID_EXPOSURE_AUTO, mode) &&
+                set_control(V4L2_CID_EXPOSURE_AUTO, mode)) {
+                return {"auto exposure", true, std::string(description) + " mode enabled"};
+            }
+        }
+        return {"auto exposure", false, "driver rejected all advertised automatic modes"};
+    }
+
+    CameraControlStatus lock_auto_control(std::uint32_t automatic_id, std::int32_t manual_value,
+                                          const char* name, std::uint32_t manual_id) const {
+        if (!query_control(automatic_id)) {
+            return {name, false, "automatic control is unsupported"};
+        }
+
+        const auto automatic_setting = get_control(manual_id);
+        if (!set_control(automatic_id, manual_value)) {
+            return {name, false, "could not disable automatic mode"};
+        }
+        if (!automatic_setting) {
+            return {name, true, "automatic mode disabled; manual value could not be verified"};
+        }
+        if (!set_control(manual_id, *automatic_setting)) {
+            return {name, true, "automatic mode disabled; calibrated value could not be restored"};
+        }
+        return {name, true, "automatic mode disabled; calibrated value restored"};
+    }
+
+    CameraControlStatus lock_auto_exposure() const {
+        if (!query_control(V4L2_CID_EXPOSURE_AUTO)) {
+            return {"auto exposure", false, "automatic control is unsupported"};
+        }
+        if (!set_control(V4L2_CID_EXPOSURE_AUTO, V4L2_EXPOSURE_MANUAL)) {
+            return {"auto exposure", false, "could not select manual exposure mode"};
+        }
+        return {"auto exposure", true,
+                "manual mode selected; calibrator will tune exposure from captured brightness"};
+    }
+
+    CameraControlStatus lock_auto_white_balance() const {
+        if (!query_control(V4L2_CID_AUTO_WHITE_BALANCE)) {
+            return {"auto white balance", false, "automatic control is unsupported"};
+        }
+        if (!set_control(V4L2_CID_AUTO_WHITE_BALANCE, 0)) {
+            return {"auto white balance", false, "could not disable automatic mode"};
+        }
+        const auto red = get_control(V4L2_CID_RED_BALANCE);
+        const auto blue = get_control(V4L2_CID_BLUE_BALANCE);
+        if (red && !set_control(V4L2_CID_RED_BALANCE, *red)) {
+            return {"auto white balance", true, "disabled; red balance could not be reaffirmed"};
+        }
+        if (blue && !set_control(V4L2_CID_BLUE_BALANCE, *blue)) {
+            return {"auto white balance", true, "disabled; blue balance could not be reaffirmed"};
+        }
+        if (!red || !blue) {
+            return {"auto white balance", true,
+                    "automatic mode disabled; current color balance could not be verified"};
+        }
+        return {"auto white balance", true, "disabled; current color balance preserved"};
+    }
+
+    std::vector<CameraControlStatus> enable_automatic_controls() const {
+        std::vector<CameraControlStatus> results;
+        results.push_back(enable_automatic_exposure());
+        results.push_back(set_automatic_control(V4L2_CID_AUTOGAIN, 1, "auto gain"));
+        results.push_back(
+            set_automatic_control(V4L2_CID_AUTO_WHITE_BALANCE, 1, "auto white balance"));
+        results.push_back(set_automatic_control(V4L2_CID_FOCUS_AUTO, 1, "autofocus"));
+        return results;
+    }
+
+    std::vector<CameraControlStatus> lock_automatic_controls() const {
+        std::vector<CameraControlStatus> results;
+        results.push_back(lock_auto_exposure());
+        results.push_back(lock_auto_control(V4L2_CID_AUTOGAIN, 0, "auto gain", V4L2_CID_GAIN));
+        results.push_back(lock_auto_white_balance());
+        results.push_back(
+            lock_auto_control(V4L2_CID_FOCUS_AUTO, 0, "autofocus", V4L2_CID_FOCUS_ABSOLUTE));
+        return results;
+    }
+
+    std::optional<CameraControlRange> exposure_absolute_range() const {
+        const auto control = query_control(V4L2_CID_EXPOSURE_ABSOLUTE);
+        if (!control) {
+            return std::nullopt;
+        }
+        return CameraControlRange{control->minimum, control->maximum, std::max(control->step, 1)};
+    }
+
+    bool set_exposure_absolute(std::int32_t value) const {
+        const auto range = exposure_absolute_range();
+        if (!range) {
+            return false;
+        }
+        const auto offset = static_cast<std::int64_t>(value) - range->minimum;
+        if (value < range->minimum || value > range->maximum || offset % range->step != 0) {
+            throw std::invalid_argument("Exposure value is outside the V4L2 control range or step");
+        }
+        return set_control(V4L2_CID_EXPOSURE_ABSOLUTE, value);
+    }
+
     Frame capture() {
         pollfd descriptor{fd, POLLIN, 0};
         int poll_result = 0;
@@ -327,6 +514,34 @@ Frame V4L2Camera::capture() {
         throw std::logic_error("Cannot capture with a moved-from V4L2 camera");
     }
     return impl_->capture();
+}
+
+std::vector<CameraControlStatus> V4L2Camera::enable_automatic_controls() {
+    if (impl_ == nullptr) {
+        throw std::logic_error("Cannot enable controls on a moved-from V4L2 camera");
+    }
+    return impl_->enable_automatic_controls();
+}
+
+std::vector<CameraControlStatus> V4L2Camera::lock_automatic_controls() {
+    if (impl_ == nullptr) {
+        throw std::logic_error("Cannot lock controls on a moved-from V4L2 camera");
+    }
+    return impl_->lock_automatic_controls();
+}
+
+std::optional<CameraControlRange> V4L2Camera::exposure_absolute_range() const {
+    if (impl_ == nullptr) {
+        throw std::logic_error("Cannot query controls on a moved-from V4L2 camera");
+    }
+    return impl_->exposure_absolute_range();
+}
+
+bool V4L2Camera::set_exposure_absolute(std::int32_t value) {
+    if (impl_ == nullptr) {
+        throw std::logic_error("Cannot set controls on a moved-from V4L2 camera");
+    }
+    return impl_->set_exposure_absolute(value);
 }
 
 } // namespace dualphoto
