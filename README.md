@@ -70,6 +70,21 @@ Each target is `dualphoto_<name>` with alias `dualphoto::<name>`, e.g.
 `dualphoto::core`, `dualphoto::display_x11`. Apps get
 `DUALPHOTO_HAVE_DISPLAY_X11=1` (etc.) compile definitions for each backend built.
 
+### Renderer preview
+
+The `dualphoto-preview` app cycles through color bars, a grayscale ramp, a
+checkerboard, and RGB gradients to smoke-test the implemented display renderer.
+On X11, run it with:
+
+```sh
+./build/apps/preview/dualphoto-preview
+./build/apps/preview/dualphoto-preview --output HDMI-1
+```
+
+Use `--display DISPLAY` to select an X server, and press Ctrl+C to stop the
+preview. Other display backends can be added to this app as their renderers are
+implemented.
+
 ### Python
 
 ```sh
