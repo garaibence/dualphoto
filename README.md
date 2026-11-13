@@ -18,7 +18,7 @@ point of view) and relighting, based on
 | `core/`         | Hardware-free library: interfaces, scan runner, T writer       |
 | `patterns/`     | `PatternSource` implementations (brute force, block, adaptive) |
 | `backends/`     | Display (X11, SDL2, DRM) and camera (OpenCV, V4L2, gphoto2)    |
-| `apps/`         | `scan`, `calibrate`, `preview` command-line tools              |
+| `apps/`         | `scan`, `calibrate`, `preview`, `camera-test` command-line tools      |
 | `tests/`        | Fake camera/display and unit tests                             |
 | `python/`       | Processing package (`pip install -e python`)                   |
 | `docs/`         | Architecture, T file format, calibration                       |
@@ -84,6 +84,21 @@ On X11, run it with:
 Use `--display DISPLAY` to select an X server, and press Ctrl+C to stop the
 preview. Other display backends can be added to this app as their renderers are
 implemented.
+
+### Camera test
+
+Enable the V4L2 backend with `-DDUALPHOTO_WITH_V4L2=ON`, then run:
+
+```sh
+./build/apps/camera_test/dualphoto-camera-test
+./build/apps/camera_test/dualphoto-camera-test \
+  --device /dev/video1 --width 1280 --height 720 --frames 30
+```
+
+By default, the app requests 640x480 from `/dev/video0`, captures 10 frames,
+and reports each frame's dimensions and mean RGB values along with the capture
+rate. The actual dimensions may differ if the camera negotiates a different
+format. Press Ctrl+C to interrupt a capture run.
 
 ### Python
 
