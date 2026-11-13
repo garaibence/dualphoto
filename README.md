@@ -8,7 +8,8 @@ point of view) and relighting, based on
 - **C++** does capture: pattern generation, display, camera, streaming T to disk.
 - **Python** does processing: loading T, dual images, relighting, viewer.
 
-> Status: project skeleton. Interfaces and backends are not implemented yet.
+> Status: project skeleton. The X11 fullscreen renderer is implemented; the
+> remaining interfaces and backends are still in progress.
 
 ## Layout
 
@@ -78,7 +79,10 @@ pip install -e "python[viewer,dev]"
 
 ## Display backends and Wayland
 
-- **X11**: precise window placement, override-redirect, MIT-SHM. Best on X11 sessions.
+- **X11**: RGB8 fullscreen rendering in an override-redirect, borderless window.
+  `dualphoto::X11Renderer(nullptr, "HDMI-1")` selects an active output, and
+  `present(width, height, rgb)` scales a packed RGB8 frame to that output.
+  Best on X11 sessions.
 - **SDL2**: fullscreen on a chosen output; works under Wayland and X11.
 - **DRM**: no compositor at all; run from a TTY.
 
